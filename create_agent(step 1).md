@@ -78,6 +78,286 @@ class SimpleAgentState(TypedDict):
 
 ---
 
+
+### Prerequisite for Module 4:
+# InjectedState in LangGraph
+
+`InjectedState` ka use tool ko graph ki state automatically dene ke liye hota hai, bina LLM ke state pass karwaye.
+
+---
+
+# Scenario
+
+State:
+
+```python
+state = {
+    "user_id": 101,
+    "messages": [
+        {"role": "user", "content": "Show my orders"}
+    ]
+}
+```
+
+Hum ek tool banana chahte hain jo user ke orders fetch kare.
+
+---
+
+# 1. WITHOUT InjectedState
+
+## Tool
+
+```python
+from langchain_core.tools import tool
+
+@tool
+def fetch_orders(user_id: int):
+    print(f"Fetching orders for user {user_id}")
+
+    return [
+        {"order_id": 1, "amount": 500},
+        {"order_id": 2, "amount": 800}
+    ]
+```
+
+## LLM Tool Call
+
+```json
+{
+  "user_id": 101
+}
+```
+
+## Flow
+
+```text
+User
+  ↓
+LLM
+  ↓
+LLM decides:
+fetch_orders(user_id=101)
+  ↓
+Tool executes
+```
+
+### Problem
+
+Agar state me `user_id=101` hai, to LLM ko ye value prompt se milni chahiye.
+
+Agar LLM galti se:
+
+```json
+{
+  "user_id": 999
+}
+```
+
+bhej de, to galat user ka data fetch ho sakta hai.
+
+---
+
+# 2. WITH InjectedState
+
+## Tool
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+
+@tool
+def fetch_orders(
+    state: Annotated[dict, InjectedState]
+):
+    user_id = state["user_id"]
+
+    print(f"Fetching orders for user {user_id}")
+
+    return [
+        {"order_id": 1, "amount": 500},
+        {"order_id": 2, "amount": 800}
+    ]
+```
+
+## LLM Tool Call
+
+```json
+{}
+```
+
+LLM ne `user_id` pass hi nahi kiya.
+
+---
+
+## LangGraph Internally
+
+Tool execute hone se pehle:
+
+```python
+state = {
+    "user_id": 101,
+    "messages": [...]
+}
+```
+
+inject kar diya jata hai.
+
+Actual execution:
+
+```python
+fetch_orders(state)
+```
+
+Tool ke andar:
+
+```python
+user_id = state["user_id"]
+```
+
+mil jata hai.
+
+---
+
+# Visual Difference
+
+## Without InjectedState
+
+```text
+State
+  ↓
+Prompt
+  ↓
+LLM
+  ↓
+Tool Call:
+{
+  "user_id": 101
+}
+  ↓
+Tool
+```
+
+State → LLM → Tool
+
+---
+
+## With InjectedState
+
+```text
+State
+  ├──────────────┐
+  │              │
+  ▼              │
+LangGraph        │
+  ▼              │
+Tool Call {}     │
+  ▼              │
+Tool <───────────┘
+```
+
+State directly Tool tak pahunchti hai.
+
+LLM ko state ka pata bhi nahi.
+
+---
+
+# More Realistic Example
+
+User:
+
+```text
+Show my last 5 orders
+```
+
+## Without InjectedState
+
+```python
+@tool
+def get_orders(user_id: int, limit: int):
+    ...
+```
+
+LLM call:
+
+```json
+{
+  "user_id": 101,
+  "limit": 5
+}
+```
+
+---
+
+## With InjectedState
+
+```python
+@tool
+def get_orders(
+    limit: int,
+    state: Annotated[dict, InjectedState]
+):
+    user_id = state["user_id"]
+
+    return db.get_orders(
+        user_id=user_id,
+        limit=limit
+    )
+```
+
+LLM call:
+
+```json
+{
+  "limit": 5
+}
+```
+
+LangGraph automatically:
+
+```python
+state["user_id"] = 101
+```
+
+inject karega.
+
+---
+
+# Security Benefit
+
+State:
+
+```python
+state = {
+    "user_id": 101,
+    "jwt_token": "secret-token",
+    "email": "abc@gmail.com"
+}
+```
+
+Without `InjectedState`, sensitive information prompt me expose ho sakti hai.
+
+With `InjectedState`, sensitive information LLM ko dikhaye bina tool use kar sakta hai.
+
+---
+
+# Key Benefits
+
+- LLM ko unnecessary state pass nahi karni padti.
+- Hallucinated arguments ka risk kam hota hai.
+- Sensitive information hidden rehti hai.
+- Prompt size aur token usage kam hota hai.
+- Tools directly trusted runtime state use karte hain.
+
+---
+
+# One-Line Summary
+
+`InjectedState` ka main purpose sirf state access dena nahi hai, balki runtime state ko safely, efficiently aur reliably tools tak pahunchana hai bina LLM par depend kiye.
+
+
+
+
 ### **Module 4: Tools ke andar se State ko Access aur Modify karna (Advanced)**
 
 #### **Core Concept:**
