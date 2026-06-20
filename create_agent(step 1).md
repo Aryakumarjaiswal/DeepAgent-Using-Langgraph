@@ -396,6 +396,143 @@ def smart_calculator(a: float, b: float, state: Annotated[dict, InjectedState]) 
 ```
 
 ---
+```plaintext
+
+# FINAL IMPLEMENTATION OF CORE CONCEPT:
+
+###############################################################################################################################
+import os
+from typing import Annotated, List, Sequence
+from typing_extensions import TypedDict
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage  # <-- Added ToolMessage
+from langchain_core.tools import tool, InjectedToolCallId  # <-- Added InjectedToolCallId
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import InjectedState, create_react_agent
+from langgraph.types import Command
+from langgraph.managed import RemainingSteps
+
+# =====================================================================
+# 1. Reducer Function (State Logs Update)
+# =====================================================================
+def reduce_ops(left: List[str] | None, right: List[str] | None) -> List[str]:
+    if left is None:
+        left = []
+    if right is None:
+        right = []
+    return left + right
+
+# =====================================================================
+# 2. Custom State Definition
+# =====================================================================
+class CustomState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    ops: Annotated[List[str], add_messages]
+    remaining_steps: RemainingSteps
+
+# =====================================================================
+# 3. Tool Definition with InjectedState, InjectedToolCallId and Command
+# =====================================================================
+
+@tool
+def smart_calculator(
+    a: float, 
+    b: float, 
+    tool_call_id: Annotated[str, InjectedToolCallId], # <-- Automatically gets the Tool Call ID from system
+    state: Annotated[dict, InjectedState]
+) -> Command:
+    """Math calculations karne aur operation logs ko state me save karne ke liye is tool ka use karein.
+    Ye tool 'a' aur 'b' ko multiply karega."""
+    result = a * b
+    
+    # State se purani logs padhi
+    current_ops = state.get("ops", [])
+    log_msg = f"Calculated: {a} * {b} = {result}"
+    
+    # Tool output ko 'messages' ke andar 'ToolMessage' banakar bheja jata hai
+    # Isme 'tool_call_id' pass karna zaroori hai
+    return Command(
+        update={
+            "ops": [log_msg],  # custom state update
+            "messages": [
+                ToolMessage(
+                    content=f"Multiplication result is {result}.", 
+                    tool_call_id=tool_call_id
+                )
+            ]  # tool message output update
+        }
+    )
+
+# =====================================================================
+# 4. Agent Initialization & Interactive Loop
+# =====================================================================
+if __name__ == "__main__":
+    
+    # TODO: Apni Gemini API key yahan paste karein
+    GEMINI_API_KEY = "AQ.Ab8RN6JRKXR33eZqhpbLRZCQiUJzgLwJotxHn5hKHA"  
+    
+    if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
+        print("Error: Please put your real Gemini API key in the code first.")
+        exit()
+
+    print("Initializing Gemini Model...")
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        api_key=GEMINI_API_KEY,
+        temperature=0
+    )
+    
+    print("Creating React Agent...")
+    agent = create_react_agent(
+        model,
+        tools=[smart_calculator],
+        state_schema=CustomState
+    )
+    
+    # Shuruat me empty state banayi
+    current_state = {
+        "messages": [],
+        "ops": []
+    }
+    
+    print("\n" + "="*50)
+    print("Welcome to Agent Chat! (Type 'exit' to quit the session)")
+    print("="*50)
+    
+    # Interactive Loop
+    while True:
+        try:
+            # User se console me message lena
+            user_input = input("\nYou: ")
+            
+            # Exit check
+            if user_input.strip().lower() == "exit":
+                print("\nEnding chat session. Goodbye!")
+                break
+            
+            if not user_input.strip():
+                continue
+            
+            # User ke naye message ko current state ki messages list me append kiya
+            current_state["messages"].append(HumanMessage(content=user_input))
+            
+            # Agent ko invoke kiya purani state ke sath
+            current_state = agent.invoke(current_state)
+            
+            # Agent ka aakhiri generated response print kiya
+            last_message = current_state["messages"][-1]
+            print(f"Agent: {last_message.content}")
+            
+            # State ke operation logs print karna
+            current_logs = current_state.get('ops', [])
+            if current_logs:
+                print(f"[Ops System Logs: {current_logs}]")
+            print(current_state["messages"] or []
+            )
+        except Exception as e:
+            print(f"\nAn error occurred: {e}")
+            break
+```
 
 ### **Summary of the Flow (Notebook me kya ho raha hai?):**
 1. Sabse pehle API setup hota hai.
