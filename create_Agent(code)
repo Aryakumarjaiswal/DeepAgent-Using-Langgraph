@@ -1,0 +1,14 @@
+### **Execution Loop in the Notebook:**
+* **User Input:** *"Dino ke baare me 3 facts search karo aur unhe compare karo."*
+* **Step 1 (Planning):** LLM sochta hai. Woh `write_todos` call karke state me likhta hai:
+  * Task 1: Search facts about Dino (status: pending)
+  * Task 2: Compare the facts (status: pending)
+* **Step 2 (Execution 1):** LLM Task 1 execute karta hai (search tool se facts nikalta hai).
+* **Step 3 (Status Update):** LLM turant `write_todos` call karke plan ko update karta hai:
+  * Task 1: Search facts (status: **completed**)
+  * Task 2: Compare the facts (status: **in_progress**)
+* **Step 4 (Execution 2):** LLM comparisons karta hai.
+* **Step 5 (Final Update):** LLM status ko `completed` mark karke user ko final answer de deta hai.
+
+### **Final Takeaway:**
+Is notebook ka crux yeh sikhana hai ki ek complex agent ko systematic aur self-monitoring kaise banayein. Ek aesa agent jo khud apna schedule (TODOs) likh sake, use read kar sake, aur usme update kar sake taaki badi se badi query me bhi dhyan na bhatke.
